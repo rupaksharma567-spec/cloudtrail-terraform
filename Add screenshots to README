@@ -66,3 +66,14 @@ Is repo ko GitHub pe daalo with:
 
 Isse tumhara "I clicked buttons in console" project "I write infrastructure
 as code" project ban jaata hai — recruiters isko differently dekhte hain.
+
+## Screenshots
+
+**Terraform apply — successful deployment**
+![Terraform Apply](terraform-apply-success.png)
+
+**CloudTrail verified in AWS Console**
+![CloudTrail Console](cloudtrail-console-verify.png)
+
+**S3 bucket security settings**
+![S3 Security](s3-bucket-security.png)
