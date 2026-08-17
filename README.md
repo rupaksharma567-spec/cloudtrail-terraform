@@ -1,15 +1,40 @@
-# Cloud Security Audit Trail — Terraform (IaC)
+# Cloud Security Audit & Compliance Logging Platform — Terraform (IaC)
 
-Terraform code jo CloudTrail + S3 audit logging setup ko infrastructure-as-code
-mein deploy karta hai. Ye wahi setup hai jo pehle AWS Console se manually banaya
-gaya tha — ab reusable aur version-controlled hai.
+Terraform code jo ek multi-layer AWS security monitoring setup ko
+infrastructure-as-code mein deploy karta hai. Poora setup pehle AWS Console
+se manually banaya gaya tha, ab reusable aur version-controlled hai.
 
 ## Kya banega
 
-- **S3 bucket** — CloudTrail logs ke liye, encrypted (SSE-S3), public access blocked, versioning on
-- **Lifecycle rule** — 30 din baad Glacier, 90 din baad auto-expire (cost control)
-- **Bucket policy** — sirf CloudTrail service ko write access
-- **CloudTrail trail** — multi-region, Management events (Read + Write), log file validation enabled
+**1. CloudTrail — Audit logging**
+- Multi-region trail, Management events (Read + Write)
+- Encrypted S3 bucket (SSE-S3), public access blocked, versioning on
+- Log file validation enabled (tamper-detection)
+- Lifecycle rule — 30 din baad Glacier, 90 din baad auto-expire
+
+**2. GuardDuty — Threat detection**
+- Foundational detector (CloudTrail/VPC/DNS-based threat analysis)
+- Koi paid add-on nahi (S3 Protection, Malware Protection, EKS Protection — sab skip kiye)
+
+**3. IAM Access Analyzer — External exposure detection**
+- Account-level external access analyzer
+- Detect karta hai agar koi resource (S3, IAM role, KMS key) galti se account ke bahar accessible ho
+
+**4. AWS Config — Resource configuration tracking**
+- Scoped sirf IAM (Users/Roles/Policies) aur S3 buckets tak — poore account tak nahi (cost control ke liye)
+- Dedicated encrypted S3 bucket configuration snapshots ke liye
+- Koi Config Rules attach nahi ki (evaluation cost avoid karne ke liye)
+
+## Architecture at a glance
+
+```
+AWS Account
+    │
+    ├── CloudTrail ──────► S3 (audit logs)
+    ├── GuardDuty ───────► Threat findings
+    ├── IAM Access Analyzer ► External exposure findings
+    └── AWS Config ──────► S3 (config snapshots, IAM + S3 scope)
+```
 
 ## Prerequisites
 
@@ -28,7 +53,7 @@ terraform plan       # dekho kya banega, bina apply kiye
 terraform apply       # confirm karke resources create honge
 ```
 
-Apply hone ke baad Terraform bucket name aur trail ARN print karega.
+Apply hone ke baad Terraform sab service outputs (bucket names, ARNs, detector IDs) print karega.
 
 Sab hata na ho toh:
 
@@ -36,36 +61,21 @@ Sab hata na ho toh:
 terraform destroy
 ```
 
-## Important — existing manual resources ke saath conflict
-
-Agar tumne pehle se console se `cloud-security-audit-trail` aur uska S3 bucket
-bana rakha hai, toh ye code ek **naya, alag** bucket/trail banayega
-(`cloud-security-audit-logs-<account-id>` naam se), taaki koi naming clash na ho.
-
-Do options hain:
-1. **Naya banao, purana delete karo** — is code se apply karo, phir console se
-   purana wala manually delete kar do.
-2. **Purane ko import karo** — existing resources ko Terraform state mein
-   import karo (`terraform import`) taaki wahi resource ab IaC se managed ho.
-   Option 1 simpler hai agar ye ek learning/portfolio project hai.
-
 ## Cost notes
 
-- Management events ki first copy — **free** (AWS khud confirm karta hai)
-- S3 storage — chhoti log volume ke liye negligible (~cents/month)
-- Lifecycle rule ki wajah se logs 90 din baad auto-delete ho jaayenge
-- KMS encryption jaan-bujh kar skip kiya hai (SSE-S3 use kiya) — cost bachane ke liye
+| Service | Cost |
+|---|---|
+| CloudTrail | Management events ki first copy free hai |
+| S3 (dono buckets) | Chhoti log volume ke liye negligible (~cents/month) |
+| GuardDuty | 30-day free trial, uske baad usage-based (low-traffic account mein bahut kam) |
+| IAM Access Analyzer | **Completely free** (external access analyzer type) |
+| AWS Config | ~$0.003 per configuration item, scoped sirf IAM+S3 tak (cost minimize karne ke liye) |
 
-## Portfolio ke liye
+Koi bhi resource jo cost badhata (RDS, NAT Gateway, Load Balancer, EC2) — jaan-bujh kar avoid kiya gaya.
 
-Is repo ko GitHub pe daalo with:
-- Ye README
-- Architecture diagram (screenshot ya draw.io)
-- `terraform apply` ka output screenshot
-- CloudTrail console verify screenshot (Logging = On)
+## Real debugging encountered
 
-Isse tumhara "I clicked buttons in console" project "I write infrastructure
-as code" project ban jaata hai — recruiters isko differently dekhte hain.
+Deployment ke dauraan `InsufficientS3BucketPolicyException` mila — root cause: CloudTrail resource mein extra `s3_key_prefix = "AWSLogs"` set kiya tha, jabki AWS khud automatically `AWSLogs/<account-id>/...` path use karta hai. Isse actual write path aur bucket policy ke allowed path mein mismatch ho gaya tha. Fix: redundant `s3_key_prefix` hataya, path match ho gaya.
 
 ## Screenshots
 
@@ -77,3 +87,8 @@ as code" project ban jaata hai — recruiters isko differently dekhte hain.
 
 **S3 bucket security settings**
 ![S3 Security](s3-bucket-security.png)
+
+## Portfolio ke liye
+
+Isse tumhara "I clicked buttons in console" project "I write infrastructure
+as code" project ban jaata hai — recruiters isko differently dekhte hain.
