@@ -161,6 +161,16 @@ resource "aws_instance" "lab" {
     Project     = var.project_name
     Environment = var.environment
   }
+
+  # AWS periodically releases newer Amazon Linux AMIs, and the
+  # associate_public_ip_address attribute is a known Terraform/AWS provider
+  # quirk -- AWS sometimes reads it back as false even when the instance
+  # correctly has a public IP (via the subnet's map_public_ip_on_launch).
+  # Ignoring both here prevents Terraform from destroying and recreating
+  # this instance on every plan due to drift that isn't a real problem.
+  lifecycle {
+    ignore_changes = [ami, associate_public_ip_address]
+  }
 }
 
 output "ec2_instance_id" {
